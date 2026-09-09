@@ -12,6 +12,7 @@ import {
 } from "../ranges";
 
 export const CHOICE_FRONTMATTER_KEY = "commentator-choices";
+export const CHOICE_INLINE_FRONTMATTER_KEY = "commentator-inline";
 
 export interface ChoiceOption {
 	label?: string;
@@ -294,6 +295,75 @@ export function resolveChoice(site: ChoiceSite, resolution: ChoiceResolution, se
 		to: site.host.full_range_back,
 		insert,
 	};
+}
+
+function comments_markup(settings: PluginSettings, comments: { text: string }[]): string {
+	return comments.map(comment => create_range(settings, SuggestionType.COMMENT, comment.text)).join("");
+}
+
+export function applyResolutions(
+	ranges: CriticMarkupRanges,
+	doc: Text,
+	source: ChoiceSource,
+	resolved: ResolvedFile | null,
+	settings: PluginSettings,
+	with_comments: boolean,
+): ChangeSpec[] {
+	const changes: ChangeSpec[] = [];
+	for (const site of findChoiceSites(ranges, doc, source)) {
+		if (!site.uid)
+			continue;
+
+		const entry = resolved?.resolutions[site.uid];
+		const decision = entry?.decision;
+		const extra = with_comments && entry?.comments?.length ?
+			comments_markup(settings, entry.comments) :
+			"";
+
+		if (decision?.kind === "option" || decision?.kind === "custom") {
+			const change = resolveChoice(site, { kind: "custom", text: decision.text }, settings) as {
+				from: number;
+				to: number;
+				insert: string;
+			};
+			changes.push({ from: change.from, to: change.to, insert: change.insert + extra });
+		} else if (decision?.kind === "reject") {
+			const change = resolveChoice(site, { kind: "reject" }, settings) as {
+				from: number;
+				to: number;
+				insert: string;
+			};
+			changes.push({ from: change.from, to: change.to, insert: change.insert + extra });
+		} else if (extra) {
+			changes.push({
+				from: site.host.full_range_back,
+				to: site.host.full_range_back,
+				insert: extra,
+			});
+		}
+	}
+	return changes;
+}
+
+const CHOICE_FRONTMATTER_LINE = new RegExp(
+	`^(${CHOICE_FRONTMATTER_KEY}|${CHOICE_INLINE_FRONTMATTER_KEY})\\s*:`,
+);
+
+function is_choice_frontmatter_line(line: string): boolean {
+	return CHOICE_FRONTMATTER_LINE.test(line.trim());
+}
+
+export function stripChoiceFrontmatter(text: string): string {
+	const match = text.match(/^---\r?\n([\s\S]*?)\r?\n---(\r?\n|$)/);
+	if (!match)
+		return text;
+
+	const kept = match[1].split(/\r?\n/).filter(line => !is_choice_frontmatter_line(line));
+	const rest = text.slice(match[0].length);
+	if (kept.every(line => line.trim() === ""))
+		return rest;
+
+	return `---\n${kept.join("\n")}\n---\n${rest}`;
 }
 
 function is_record(value: unknown): value is Record<string, unknown> {

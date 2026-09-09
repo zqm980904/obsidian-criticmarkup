@@ -1,7 +1,8 @@
-import { type ChangeSpec, Text } from "@codemirror/state";
+import { ChangeSet, type ChangeSpec, Text } from "@codemirror/state";
 
 import { DEFAULT_SETTINGS } from "../src/constants";
 import {
+	applyResolutions,
 	choiceSpecFromEntry,
 	type ChoiceFile,
 	type ChoiceSource,
@@ -17,6 +18,7 @@ import {
 	resolvedPathFor,
 	type ResolvedFile,
 	revertResolutionsToSkip,
+	stripChoiceFrontmatter,
 	uidMarkersIn,
 	validateChoiceFile,
 } from "../src/editor/base/edit-logic/resolve-choice";
@@ -616,5 +618,166 @@ describe("uidMarkersIn", () => {
 			{ type: SuggestionType.ADDITION, unwrap: "#c3" },
 		]);
 		expect(uidMarkersIn(ranges.ranges)).toEqual(["c1", "c2"]);
+	});
+});
+
+describe("applyResolutions", () => {
+	const MULTI_FILE: ChoiceFile = {
+		version: 1,
+		choices: {
+			c1: {
+				options: [
+					{ label: "a", text: "hello" },
+					{ label: "b", text: "world" },
+				],
+			},
+			c2: {
+				options: [
+					{ text: "alpha" },
+					{ text: "beta" },
+				],
+			},
+		},
+	};
+	const MULTI = "Start {~~old~>new~~}{>>#c1<<} mid {==span==}{>>#c2<<} end";
+	const source: ChoiceSource = { mode: "external", file: MULTI_FILE };
+
+	function apply_resolved(text: string, resolved: ResolvedFile | null, with_comments = false) {
+		const ranges = parse(text);
+		const doc = doc_of(text);
+		const changes = applyResolutions(ranges, doc, source, resolved, DEFAULT_SETTINGS, with_comments);
+		return ChangeSet.of(changes, doc.length).apply(doc).toString();
+	}
+
+	test("option replaces the host with decision.text", () => {
+		const resolved: ResolvedFile = {
+			version: 1,
+			source: "x.json",
+			resolutions: {
+				c1: { decision: { kind: "option", label: "a", text: "hello", time: 1 } },
+			},
+		};
+		expect(apply_resolved(MULTI, resolved)).toBe("Start hello mid {==span==}{>>#c2<<} end");
+	});
+
+	test("custom replaces the host with decision.text", () => {
+		const resolved: ResolvedFile = {
+			version: 1,
+			source: "x.json",
+			resolutions: {
+				c1: { decision: { kind: "custom", text: "rewritten", time: 1 } },
+			},
+		};
+		expect(apply_resolved(MULTI, resolved)).toBe("Start rewritten mid {==span==}{>>#c2<<} end");
+	});
+
+	test("reject restores the original on a substitution and unwraps a highlight", () => {
+		const resolved: ResolvedFile = {
+			version: 1,
+			source: "x.json",
+			resolutions: {
+				c1: { decision: { kind: "reject", time: 1 } },
+				c2: { decision: { kind: "reject", time: 2 } },
+			},
+		};
+		expect(apply_resolved(MULTI, resolved)).toBe("Start old mid span end");
+	});
+
+	test("skip and missing leave the host untouched", () => {
+		const resolved: ResolvedFile = {
+			version: 1,
+			source: "x.json",
+			resolutions: {
+				c1: { decision: { kind: "skip", time: 1 } },
+			},
+		};
+		expect(apply_resolved(MULTI, resolved)).toBe(MULTI);
+		expect(apply_resolved(MULTI, null)).toBe(MULTI);
+	});
+
+	test("with_comments appends comments to a decided site", () => {
+		const resolved: ResolvedFile = {
+			version: 1,
+			source: "x.json",
+			resolutions: {
+				c1: {
+					comments: [
+						{ text: "note one", time: 1 },
+						{ text: "note two", time: 2 },
+					],
+					decision: { kind: "option", label: "a", text: "hello", time: 3 },
+				},
+			},
+		};
+		expect(apply_resolved(MULTI, resolved, true)).toBe(
+			"Start hello{>>note one<<}{>>note two<<} mid {==span==}{>>#c2<<} end",
+		);
+	});
+
+	test("with_comments inserts comments after an undecided host", () => {
+		const resolved: ResolvedFile = {
+			version: 1,
+			source: "x.json",
+			resolutions: {
+				c1: {
+					comments: [{ text: "note one", time: 1 }],
+					decision: { kind: "skip", time: 2 },
+				},
+			},
+		};
+		expect(apply_resolved(MULTI, resolved, true)).toBe(
+			"Start {~~old~>new~~}{>>#c1<<}{>>note one<<} mid {==span==}{>>#c2<<} end",
+		);
+	});
+
+	test("multiple sites apply in one ChangeSet", () => {
+		const resolved: ResolvedFile = {
+			version: 1,
+			source: "x.json",
+			resolutions: {
+				c1: {
+					comments: [{ text: "keep", time: 1 }],
+					decision: { kind: "custom", text: "rewritten", time: 2 },
+				},
+				c2: { decision: { kind: "option", text: "alpha", time: 3 } },
+			},
+		};
+		expect(apply_resolved(MULTI, resolved, true)).toBe("Start rewritten{>>keep<<} mid alpha end");
+	});
+});
+
+describe("stripChoiceFrontmatter", () => {
+	test("strips only the two keys and keeps other keys", () => {
+		const input = [
+			"---",
+			"title: Hello",
+			"commentator-choices: ./note.choices.json",
+			"tags: [a]",
+			"commentator-inline: true",
+			"---",
+			"body",
+			"",
+		].join("\n");
+		expect(stripChoiceFrontmatter(input)).toBe([
+			"---",
+			"title: Hello",
+			"tags: [a]",
+			"---",
+			"body",
+			"",
+		].join("\n"));
+	});
+
+	test("removes an empty frontmatter block including the trailing newline", () => {
+		expect(stripChoiceFrontmatter("---\ncommentator-choices: ./x.json\n---\nbody")).toBe("body");
+		expect(stripChoiceFrontmatter("---\ncommentator-inline: true\n---\n")).toBe("");
+	});
+
+	test("unchanged when there is no leading frontmatter", () => {
+		expect(stripChoiceFrontmatter("just text")).toBe("just text");
+		expect(stripChoiceFrontmatter("# heading\n---\nnot fm\n---\n")).toBe("# heading\n---\nnot fm\n---\n");
+		expect(stripChoiceFrontmatter("body\ncommentator-choices: ./x.json\n")).toBe(
+			"body\ncommentator-choices: ./x.json\n",
+		);
 	});
 });
