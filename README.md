@@ -98,6 +98,69 @@ context menus, or from the global annotation view. Picking an option or typing a
 the document and removes the suggestion and its comment thread; rejecting restores the original text. Skipped items are left
 untouched, and the markup stays valid CriticMarkup for other tools.
 
+The dialog shows the full line around the host: text before the suggestion, the original (highlighted), and text after,
+with other CriticMarkup on that line unwrapped. Custom text has a Revision / Comment switch. Revision (the default)
+replaces the suggestion like an option. Comment inserts a `{>>text<<}` reply after the thread, leaves the site pending,
+and stays on the same item.
+
+##### External choice files
+
+A note can instead load choices from a JSON file by setting `commentator-choices` in frontmatter to a path relative to
+the note:
+
+```yaml
+---
+commentator-choices: ./note.choices.json
+---
+```
+
+The host stays a substitution or highlight; the attached comment holds only a UID:
+
+```text
+{~~the model shows~>the results indicate~~}{>>#c1<<}
+```
+
+```json
+{
+  "version": 1,
+  "choices": {
+    "c1": {
+      "options": [
+        { "label": "a", "text": "the results indicate" },
+        { "label": "b", "text": "we find" },
+        { "label": "c", "blank": true }
+      ],
+      "note": "hedge less"
+    }
+  }
+}
+```
+
+Resolving also records the decision in a sibling `.resolved.json` file (`note.choices.json` becomes
+`note.choices.resolved.json`), merged with any existing content:
+
+```json
+{
+  "version": 1,
+  "source": "note.choices.json",
+  "resolutions": {
+    "c1": {
+      "comments": [{ "text": "not sure about tense", "time": 1757400000000 }],
+      "decision": { "kind": "option", "label": "a", "text": "the results indicate", "time": 1757400100000 }
+    }
+  }
+}
+```
+
+`decision.kind` is `"option"`, `"custom"`, `"reject"`, or `"skip"`. Skip is recorded as `{"kind":"skip"}`. Adding a comment
+records the comment and a skip decision and moves the dialog to the next item. Undoing a resolved choice in the editor
+reverts its decision to skip; redoing restores the decision (same editor session only).
+
+Modes are exclusive. When `commentator-choices` is set, only UID comments with a matching JSON entry are offered in the
+resolver; inline `pick:` comments still render but are not listed. Without the key, only `pick:` comments are sites and
+UID comments are ignored. If the key is present but the file is missing, unreadable, or invalid, a notice is shown and
+the dialog does not open.
+
 ### Suggestion Mode
 
 - [x] Converting edit operations into appropriate markings

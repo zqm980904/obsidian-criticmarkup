@@ -1,4 +1,4 @@
-import { type Editor, type MarkdownView, Platform } from "obsidian";
+import { type Editor, type MarkdownFileInfo, type MarkdownView, Platform } from "obsidian";
 
 import type CommentatorPlugin from "../../main";
 import { type ECommand, EditMode } from "../../types";
@@ -23,6 +23,7 @@ import {
 	previewModeState,
 } from "../settings";
 import { getEditMode } from "./extensions/editing-modes";
+import { getChoiceMode } from "../../util/choice-file";
 import { showProgressBarNotice } from "../../util/obsidian-util";
 import { annotationGutterFoldAnnotation } from "../renderers/gutters";
 import {pathWithoutExtension} from "../../util/util";
@@ -127,10 +128,12 @@ export const editor_commands: (plugin: CommentatorPlugin) => ECommand[] = (plugi
 		name: "Resolve suggested edits with choices",
 		icon: "list-checks",
 		editor_context: true,
-		check_callback: (checking: boolean, editor: Editor, _) => {
-			const has_sites = findChoiceSites(editor.cm.state.field(rangeParser).ranges).length > 0;
-			if (checking || !has_sites) return has_sites;
-			new ChoiceResolverModal(plugin.app, editor.cm).open();
+		check_callback: (checking: boolean, editor: Editor, view: MarkdownView | MarkdownFileInfo) => {
+			const file = view.file ?? null;
+			const mode = getChoiceMode(plugin.app, file);
+			const available = mode.mode === "external" || findChoiceSites(editor.cm.state.field(rangeParser).ranges, editor.cm.state.doc, { mode: "inline" }).length > 0;
+			if (checking || !available) return available;
+			new ChoiceResolverModal(plugin.app, editor.cm, file).open();
 		},
 	},
 	{

@@ -17,7 +17,7 @@ import {
 	RANGE_PROTOTYPE_MAPPER, rangeParser,
 } from "./editor/base";
 import { cmenuGlobalCommands, cmenuViewportCommands, commands } from "./editor/uix";
-import { bracketMatcher, editorKeypressCatcher, getEditMode, rangeCorrecter, focusAnnotation, providePluginSettingsExtension } from "./editor/uix/extensions";
+import { bracketMatcher, choiceHistorySync, editorKeypressCatcher, getEditMode, rangeCorrecter, focusAnnotation, providePluginSettingsExtension } from "./editor/uix/extensions";
 import {
 	annotationGutter, annotationGutterCompartment,
 	annotationGutterFoldButtonAnnotation, annotationGutterResizeHandleAnnotation,
@@ -108,6 +108,7 @@ export default class CommentatorPlugin extends Plugin {
 		this.editorExtensions.push(editMode.of(getEditMode(this.settings.default_edit_mode, this.settings)));
 
 		this.editorExtensions.push(rangeParser);
+		this.editorExtensions.push(choiceHistorySync);
 
 		if (this.settings.annotation_gutter) {
 			const annotation_gutter = annotationGutter(this);

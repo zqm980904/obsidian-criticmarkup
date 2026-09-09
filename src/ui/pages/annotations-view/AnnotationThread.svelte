@@ -1,6 +1,7 @@
 <script lang="ts">
     import type CommentatorPlugin from "../../../main";
-    import { type CriticMarkupRangeEntry, SUGGESTION_ICON_MAPPER, SuggestionType, findChoiceSite } from "../../../editor/base";
+    import { type CriticMarkupRangeEntry, SUGGESTION_ICON_MAPPER, SuggestionType, findChoiceMarker } from "../../../editor/base";
+    import { getChoiceMode } from "../../../util/choice-file";
     import { MarkdownRenderer, Icon } from "../../components";
     import { onContextMenu } from "./context-menu";
     import AnnotationThreadQuickActions from "./AnnotationThreadQuickActions.svelte";
@@ -38,7 +39,13 @@
 	}
 
     let is_selected = $derived(selected_ranges.some((range) => range.path === row.path && range.range.from === row.range.from));
-    const choice_site = $derived(findChoiceSite(row.range));
+    const choice_site = $derived.by(() => {
+        const marker = findChoiceMarker(row.range);
+        if (!marker) return null;
+        const file = plugin.app.vault.getFileByPath(row.path);
+        const mode = getChoiceMode(plugin.app, file);
+        return (mode.mode === "inline" ? marker.marker.kind === "inline" : marker.marker.kind === "external") ? marker : null;
+    });
 
 </script>
 
