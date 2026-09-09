@@ -1,6 +1,6 @@
 <script lang="ts">
     import type CommentatorPlugin from "../../../main";
-    import { type CriticMarkupRangeEntry, SUGGESTION_ICON_MAPPER, SuggestionType } from "../../../editor/base";
+    import { type CriticMarkupRangeEntry, SUGGESTION_ICON_MAPPER, SuggestionType, findChoiceSite } from "../../../editor/base";
     import { MarkdownRenderer, Icon } from "../../components";
     import { onContextMenu } from "./context-menu";
     import AnnotationThreadQuickActions from "./AnnotationThreadQuickActions.svelte";
@@ -38,6 +38,7 @@
 	}
 
     let is_selected = $derived(selected_ranges.some((range) => range.path === row.path && range.range.from === row.range.from));
+    const choice_site = $derived(findChoiceSite(row.range));
 
 </script>
 
@@ -48,6 +49,7 @@
 		tabindex={index}
 		class="cmtr-view-range"
 		class:cmtr-view-range-completed={row.range.fields.done}
+		class:cmtr-view-range-choice={!!choice_site}
 		class:cmtr-view-range-selected={is_selected}
 		onmouseenter={() => { setHoveredIndex(0); }}
 		onmouseleave={() => { setHoveredIndex(null); }}
@@ -72,6 +74,9 @@
 			<span class="cmtr-view-range-title">{row.path}</span>
 			{@html createMetadataInfoElement(row.range, "", "icon").outerHTML}
 		</div>
+		{#if choice_site}
+			<span class="cmtr-view-range-choice-badge">Choices</span>
+		{/if}
 	</div>
 
 	{#key row.range.text}

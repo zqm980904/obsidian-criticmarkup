@@ -35,6 +35,18 @@
   border-style: dashed;
 }
 
+.cmtr-view-range-choice {
+  border-left: 2px solid var(--interactive-accent);
+}
+
+.cmtr-view-range-choice-badge {
+  font-size: var(--font-smallest);
+  padding: 0 var(--size-4-1);
+  border-radius: var(--radius-s);
+  background: var(--background-modifier-hover);
+  color: var(--text-muted);
+}
+
 .cmtr-view-range:hover {
   box-shadow: unset;
   outline: 2px dashed var(--interactive-accent-hover);
