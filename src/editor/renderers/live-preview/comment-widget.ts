@@ -2,8 +2,9 @@ import { EditorView, WidgetType } from "@codemirror/view";
 
 import { App, Component, editorInfoField, MarkdownRenderer, Menu, Notice, setIcon } from "obsidian";
 
-import { addCommentToView, CM_All_Brackets, create_range, CommentRange, CriticMarkupRange, findChoiceSite, findChoiceSites, rangeParser } from "../../base";
+import { addCommentToView, CM_All_Brackets, create_range, CommentRange, CriticMarkupRange, findChoiceMarker } from "../../base";
 import { ChoiceResolverModal } from "../../../ui/modals";
+import { getChoiceMode } from "../../../util/choice-file";
 import { annotationGutterFocusAnnotation } from "../gutters";
 import { pluginSettingsField } from "../../uix";
 
@@ -123,16 +124,16 @@ export class CommentIconWidget extends WidgetType {
 			menu.dom.addEventListener("click", () => { this.setFocused(true); });
 			menu.onHide(() => { this.context_menu = null; });
 
-			const choice_site = findChoiceSite(this.range);
-			if (choice_site) {
+			const marker = findChoiceMarker(this.range);
+			const file = this.view.state.field(editorInfoField).file ?? null;
+			const mode = getChoiceMode(app, file);
+			if (marker && (mode.mode === "inline" ? marker.marker.kind === "inline" : marker.marker.kind === "external")) {
 				menu.addItem((item) => {
 					item.setTitle("Resolve choice…")
 						.setIcon("list-checks")
 						.setSection("close-annotation")
 						.onClick(() => {
-							const sites = findChoiceSites(this.view.state.field(rangeParser).ranges);
-							const indexOfSite = sites.findIndex(s => s.host.from === choice_site.host.from);
-							new ChoiceResolverModal(app, this.view, Math.max(0, indexOfSite)).open();
+							new ChoiceResolverModal(app, this.view, file, marker.host.from).open();
 						});
 				});
 			}

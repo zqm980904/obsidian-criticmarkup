@@ -5,8 +5,9 @@ import { Component, editorEditorField, editorInfoField, MarkdownRenderer, Menu, 
 
 import { EmbeddableMarkdownEditor } from "../../../../ui/embeddable-editor";
 
-import { acceptSuggestions, addCommentToView, create_range, CriticMarkupRange, findChoiceSite, findChoiceSites, rangeParser, rejectSuggestions, SuggestionType } from "../../../base";
+import { acceptSuggestions, addCommentToView, create_range, CriticMarkupRange, findChoiceMarker, rangeParser, rejectSuggestions, SuggestionType } from "../../../base";
 import { ChoiceResolverModal } from "../../../../ui/modals";
+import { getChoiceMode } from "../../../../util/choice-file";
 
 import { AnnotationInclusionType } from "../../../../constants";
 import { annotationGutterIncludedTypes, annotationGutterIncludedTypesState } from "../../../settings";
@@ -191,17 +192,16 @@ class AnnotationNode extends Component {
 			});
 		}
 
-		const choice_site = findChoiceSite(this.range);
-		if (choice_site) {
+		const marker = findChoiceMarker(this.range);
+		const { app, file } = this.marker.view.state.field(editorInfoField);
+		const mode = getChoiceMode(app, file);
+		if (marker && (mode.mode === "inline" ? marker.marker.kind === "inline" : marker.marker.kind === "external")) {
 			menu.addItem((item) => {
 				item.setTitle("Resolve choice…")
 					.setIcon("list-checks")
 					.setSection("close-annotation")
 					.onClick(() => {
-						const { app } = this.marker.view.state.field(editorInfoField);
-						const sites = findChoiceSites(this.marker.view.state.field(rangeParser).ranges);
-						const indexOfSite = sites.findIndex(s => s.host.from === choice_site.host.from);
-						new ChoiceResolverModal(app, this.marker.view, Math.max(0, indexOfSite)).open();
+						new ChoiceResolverModal(app, this.marker.view, file, marker.host.from).open();
 					});
 			});
 		}
