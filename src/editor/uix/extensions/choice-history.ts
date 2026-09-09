@@ -33,7 +33,7 @@ export const choiceHistorySync = [
 
 		const { app, file } = update.state.field(editorInfoField);
 		const mode = getChoiceMode(app, file);
-		if (mode.mode !== "external") return;
+		if (!(mode.mode === "external" && mode.inline)) return;
 
 		const parser = update.state.field(rangeParser);
 		const report = (error: unknown) => new Notice(error instanceof Error ? error.message : String(error));

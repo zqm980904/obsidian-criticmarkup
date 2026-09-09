@@ -136,8 +136,18 @@ The host stays a substitution or highlight; the attached comment holds only a UI
 }
 ```
 
-Resolving also records the decision in a sibling `.resolved.json` file (`note.choices.json` becomes
-`note.choices.resolved.json`), merged with any existing content:
+By default, resolving in external mode records the decision in a sibling `.resolved.json` file only and does not edit
+the note. Set `commentator-inline: true` in frontmatter to also apply the chosen text in the editor:
+
+```yaml
+---
+commentator-choices: ./note.choices.json
+commentator-inline: true
+---
+```
+
+Resolutions are merged into `note.choices.resolved.json` (`note.choices.json` becomes
+`note.choices.resolved.json`):
 
 ```json
 {
@@ -153,8 +163,13 @@ Resolving also records the decision in a sibling `.resolved.json` file (`note.ch
 ```
 
 `decision.kind` is `"option"`, `"custom"`, `"reject"`, or `"skip"`. Skip is recorded as `{"kind":"skip"}`. Adding a comment
-records the comment and a skip decision and moves the dialog to the next item. Undoing a resolved choice in the editor
-reverts its decision to skip; redoing restores the decision (same editor session only).
+records the comment and a skip decision and moves the dialog to the next item. When `commentator-inline: true`, undoing a
+resolved choice in the editor reverts its decision to skip; redoing restores the decision (same editor session only).
+
+`Export resolved choices` writes the note with settled decisions applied to `<note>.resolved.md` next to the source
+(for `folder/note.md`, that is `folder/note.resolved.md`), stripping `commentator-choices` and `commentator-inline` from
+frontmatter. `Export resolved choices with comments` does the same and appends recorded `{>>…<<}` replies.
+`Revert resolved choices` lists settled decisions so you can revert selected items to skip in the resolved file.
 
 Modes are exclusive. When `commentator-choices` is set, only UID comments with a matching JSON entry are offered in the
 resolver; inline `pick:` comments still render but are not listed. Without the key, only `pick:` comments are sites and

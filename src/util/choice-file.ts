@@ -1,18 +1,26 @@
-import { type App, TFile } from "obsidian";
+import { ChangeSet, Text } from "@codemirror/state";
+import { type App, Notice, TFile } from "obsidian";
 
+import type CommentatorPlugin from "../main";
 import {
+	applyResolutions,
 	CHOICE_FRONTMATTER_KEY,
+	CHOICE_INLINE_FRONTMATTER_KEY,
 	type ChoiceRecord,
 	type ChoiceSource,
+	CriticMarkupRanges,
+	findChoiceSites,
+	getRangesInText,
 	mergeResolution,
 	resolveChoiceFilePath,
 	type ResolvedFile,
 	resolvedPathFor,
 	revertResolutionsToSkip,
+	stripChoiceFrontmatter,
 	validateChoiceFile,
 } from "../editor/base";
 
-export type ChoiceMode = { mode: "inline" } | { mode: "external"; path: string };
+export type ChoiceMode = { mode: "inline" } | { mode: "external"; path: string; inline: boolean };
 
 function file_by_path(app: App, path: string): TFile | null {
 	if (typeof app.vault.getFileByPath === "function")
@@ -25,11 +33,16 @@ export function getChoiceMode(app: App, file: TFile | null): ChoiceMode {
 	if (!file)
 		return { mode: "inline" };
 
-	const value = app.metadataCache.getFileCache(file)?.frontmatter?.[CHOICE_FRONTMATTER_KEY];
+	const frontmatter = app.metadataCache.getFileCache(file)?.frontmatter;
+	const value = frontmatter?.[CHOICE_FRONTMATTER_KEY];
 	if (typeof value !== "string" || value.trim() === "")
 		return { mode: "inline" };
 
-	return { mode: "external", path: resolveChoiceFilePath(file.path, value.trim()) };
+	return {
+		mode: "external",
+		path: resolveChoiceFilePath(file.path, value.trim()),
+		inline: frontmatter?.[CHOICE_INLINE_FRONTMATTER_KEY] === true,
+	};
 }
 
 export async function loadChoiceSource(app: App, mode: ChoiceMode): Promise<ChoiceSource> {
@@ -64,6 +77,63 @@ export async function loadChoiceSource(app: App, mode: ChoiceMode): Promise<Choi
 	return { mode: "external", file: validated };
 }
 
+export async function loadResolvedFile(app: App, json_path: string): Promise<ResolvedFile | null> {
+	const existing_file = file_by_path(app, resolvedPathFor(json_path));
+	if (!existing_file)
+		return null;
+
+	try {
+		const parsed = JSON.parse(await app.vault.read(existing_file)) as Partial<ResolvedFile>;
+		if (parsed && typeof parsed.resolutions === "object" && parsed.resolutions !== null)
+			return parsed as ResolvedFile;
+	} catch {
+		return null;
+	}
+	return null;
+}
+
+function resolved_note_path(note_path: string): string {
+	if (note_path.endsWith(".md"))
+		return note_path.slice(0, -".md".length) + ".resolved.md";
+	return note_path + ".resolved.md";
+}
+
+export async function exportResolvedNote(plugin: CommentatorPlugin, file: TFile, with_comments: boolean): Promise<void> {
+	const { app } = plugin;
+	const mode = getChoiceMode(app, file);
+	if (mode.mode !== "external") {
+		new Notice("This note does not use an external choice file");
+		return;
+	}
+
+	try {
+		const source = await loadChoiceSource(app, mode);
+		const resolved = await loadResolvedFile(app, mode.path);
+		const text = await app.vault.read(file);
+		const ranges = new CriticMarkupRanges(getRangesInText(text, plugin.settings));
+		const doc = Text.of(text.split("\n"));
+		const change_specs = applyResolutions(ranges, doc, source, resolved, plugin.settings, with_comments);
+		const output = stripChoiceFrontmatter(ChangeSet.of(change_specs, doc.length).apply(doc).toString());
+		const out_path = resolved_note_path(file.path);
+
+		const existing = file_by_path(app, out_path);
+		if (existing)
+			await app.vault.modify(existing, output);
+		else
+			await app.vault.create(out_path, output);
+
+		let exported = 0;
+		for (const site of findChoiceSites(ranges, doc, source)) {
+			const decision = site.uid ? resolved?.resolutions[site.uid]?.decision : undefined;
+			if (decision && decision.kind !== "skip")
+				exported += 1;
+		}
+		new Notice(`Exported ${exported} resolved choices to ${out_path}`);
+	} catch (error) {
+		new Notice(error instanceof Error ? error.message : String(error));
+	}
+}
+
 // All resolved-file writes go through one queue so a read-modify-write never interleaves with another
 let write_queue: Promise<void> = Promise.resolve();
 
@@ -75,17 +145,7 @@ function update_resolved_file(
 	const run = async () => {
 		const resolved_path = resolvedPathFor(json_path);
 		const existing_file = file_by_path(app, resolved_path);
-
-		let existing: ResolvedFile | null = null;
-		if (existing_file) {
-			try {
-				const parsed = JSON.parse(await app.vault.read(existing_file)) as Partial<ResolvedFile>;
-				if (parsed && typeof parsed.resolutions === "object" && parsed.resolutions !== null)
-					existing = parsed as ResolvedFile;
-			} catch {
-				existing = null;
-			}
-		}
+		const existing = await loadResolvedFile(app, json_path);
 
 		const data = update(existing);
 		if (!data) return;

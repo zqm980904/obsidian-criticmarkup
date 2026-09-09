@@ -1,24 +1,37 @@
 <script lang="ts">
-  import type { ChoiceOption, ChoiceResolution, ChoiceSite } from "../../editor/base";
+  import type { ChoiceOption, ChoiceResolution, ChoiceSite, ResolvedDecision } from "../../editor/base";
 
   interface Props {
     sites: ChoiceSite[];
     index: number;
     source_path?: string;
+    record_only?: boolean;
+    decisions?: Record<string, ResolvedDecision>;
     onResolve: (site: ChoiceSite, resolution: ChoiceResolution) => ChoiceSite[];
     onSkip: (site: ChoiceSite) => void;
     onClose: () => void;
   }
 
-  let { sites, index, source_path, onResolve, onSkip, onClose }: Props = $props();
+  let {
+    sites,
+    index,
+    source_path,
+    record_only = false,
+    decisions: initial_decisions = {},
+    onResolve,
+    onSkip,
+    onClose,
+  }: Props = $props();
 
   let current_sites = $state(sites);
   let current_index = $state(index);
   let custom_text = $state("");
   let custom_mode = $state<"revision" | "comment">("revision");
   let custom_input: HTMLInputElement | undefined = $state();
+  let decisions = $state<Record<string, ResolvedDecision>>({ ...initial_decisions });
 
   let site = $derived(current_sites[current_index] as ChoiceSite | undefined);
+  let decision = $derived(site?.uid ? decisions[site.uid] : undefined);
 
   function optionLetter(option: ChoiceOption, i: number): string {
     return option.label ?? String.fromCharCode(97 + i);
@@ -43,10 +56,51 @@
     resetInput();
   }
 
+  function setDecision(target: ChoiceSite, resolution: ChoiceResolution | { kind: "skip" }) {
+    if (!target.uid) return;
+    const time = Date.now();
+    let next: ResolvedDecision;
+    if (resolution.kind === "comment" || resolution.kind === "skip")
+      next = { kind: "skip", time };
+    else if (resolution.kind === "option") {
+      next = { kind: "option", text: resolution.option.text, time };
+      if (resolution.option.label !== undefined)
+        next.label = resolution.option.label;
+    } else if (resolution.kind === "custom")
+      next = { kind: "custom", text: resolution.text, time };
+    else
+      next = { kind: "reject", time };
+    decisions = { ...decisions, [target.uid]: next };
+  }
+
+  function decisionLine(current: ResolvedDecision): string {
+    if (current.kind === "reject")
+      return "Rejected";
+    if (current.kind === "custom")
+      return `Decided: ${current.text}`;
+    if (current.kind === "option")
+      return current.label !== undefined ? `Decided: (${current.label}) ${current.text}` : `Decided: ${current.text}`;
+    return "";
+  }
+
+  function optionIsActive(option: ChoiceOption): boolean {
+    if (!decision || decision.kind !== "option")
+      return false;
+    if (option.label !== undefined && decision.label !== undefined)
+      return option.label === decision.label;
+    return option.text === decision.text;
+  }
+
   function apply(resolution: ChoiceResolution) {
     if (!site) return;
+    const target = site;
     current_sites = onResolve(site, resolution);
+    setDecision(target, resolution);
     resetInput();
+    if (record_only) {
+      advance();
+      return;
+    }
     if (current_sites.length === 0) {
       onClose();
       return;
@@ -61,7 +115,10 @@
   }
 
   function skip() {
-    if (site) onSkip(site);
+    if (site) {
+      onSkip(site);
+      setDecision(site, { kind: "skip" });
+    }
     advance();
   }
 
@@ -118,9 +175,13 @@
       </div>
     {/if}
 
+    {#if decision && decision.kind !== "skip"}
+      <div class="cmtr-choice-resolver-decision">{decisionLine(decision)}</div>
+    {/if}
+
     <div class="cmtr-choice-resolver-options">
       {#each site.spec.options as option, i}
-        <button type="button" onclick={() => onOptionClick(option)}>
+        <button type="button" class:is-active={optionIsActive(option)} onclick={() => onOptionClick(option)}>
           {optionLabel(option, i)}
         </button>
       {/each}

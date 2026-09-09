@@ -5,7 +5,10 @@ module.exports = {
 	collectCoverage: false,
 
 	transform: {
-		'^.+\\.ts$': 'ts-jest',
+		// package.json is "type":"module"; ts-jest needs verbatimModuleSyntax off to compile tests
+		'^.+\\.ts$': ['ts-jest', {
+			tsconfig: { verbatimModuleSyntax: false },
+		}],
 		"^.+\\.(js|jsx)$": "esbuild-jest"
 	},
 
