@@ -1,4 +1,4 @@
-import { SuggestionType } from "./editor/base";
+import { SuggestionType } from "./editor/base/ranges";
 import {
 	EditMode,
 	type PluginSettings,

@@ -4,10 +4,12 @@ import { EditorSelection } from "@codemirror/state";
 
 import {
     addCommentToView, applyToFile, CommentRange,
-    type CriticMarkupRangeEntry, groupRangeEntryByPath, SuggestionType
+    type CriticMarkupRangeEntry, findChoiceSite, findChoiceSites,
+    groupRangeEntryByPath, rangeParser, SuggestionType
 } from "../../../editor/base";
 import { applyRangeEditsToVault, centerRangeInEditorView } from "../../../editor/uix";
 import { annotationGutterFocusAnnotation } from "../../../editor/renderers/gutters";
+import { ChoiceResolverModal } from "../../modals";
 
 export function onContextMenu(
     plugin: CommentatorPlugin,
@@ -80,6 +82,31 @@ export function onContextMenu(
                     }
                 });
         });
+
+        const choice_site = findChoiceSite(range);
+        if (choice_site) {
+            menu.addItem((item) => {
+                item
+                    .setTitle("Resolve choice…")
+                    .setIcon("list-checks")
+                    .setSection("comment-handling")
+                    .onClick(async () => {
+                        const file = plugin.app.vault.getAbstractFileByPath(path);
+                        if (file && file instanceof TFile) {
+                            const leaf = plugin.app.workspace.getLeaf(false);
+                            await leaf.openLinkText(path, "");
+                            if (leaf.view instanceof MarkdownView) {
+                                const { editor } = leaf.view;
+                                centerRangeInEditorView(editor, range);
+                                const view = editor.cm;
+                                const sites = findChoiceSites(view.state.field(rangeParser).ranges);
+                                const indexOfSite = sites.findIndex(s => s.host.from === choice_site.host.from);
+                                new ChoiceResolverModal(plugin.app, view, Math.max(0, indexOfSite)).open();
+                            }
+                        }
+                    });
+            });
+        }
 
         if (range.type === SuggestionType.COMMENT) {
             menu.addItem((item) => {

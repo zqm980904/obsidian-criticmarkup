@@ -52,3 +52,58 @@
 .cmtr-daterange-picker table tr:last-child td {
   padding-bottom: var(--size-4-1) !important;
 }
+
+.cmtr-choice-resolver-modal {
+  .cmtr-choice-resolver {
+    display: flex;
+    flex-direction: column;
+    gap: var(--size-4-2);
+  }
+
+  .cmtr-choice-resolver-counter {
+    color: var(--text-muted);
+    font-size: var(--font-small);
+  }
+
+  .cmtr-choice-resolver-label {
+    font-size: var(--font-small);
+    color: var(--text-muted);
+    margin-bottom: var(--size-4-1);
+  }
+
+  .cmtr-choice-resolver-block {
+    background: var(--background-secondary);
+    font-family: var(--font-monospace);
+    padding: var(--size-4-2);
+    border-radius: var(--radius-s);
+    white-space: pre-wrap;
+  }
+
+  .cmtr-choice-resolver-options {
+    display: flex;
+    flex-direction: column;
+    gap: var(--size-4-1);
+  }
+
+  .cmtr-choice-resolver-note {
+    color: var(--text-muted);
+    font-size: var(--font-small);
+  }
+
+  .cmtr-choice-resolver-custom {
+    display: flex;
+    gap: var(--size-4-2);
+
+    input {
+      flex: 1;
+    }
+  }
+
+  .cmtr-choice-resolver-footer {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: var(--size-4-2);
+    margin-top: var(--size-4-2);
+  }
+}

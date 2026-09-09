@@ -79,7 +79,24 @@ To set up a development environment, please follow the following instructions:
 
 - [x] Extend CriticMarkup syntax to allow for authorship and timestamp annotation
 - [x] Extend `Comment` markup to support comment threads
+- [x] Choice comments: offer several candidate wordings for a single suggestion (see below)
 - [ ] Allow custom highlight colours for `Highlight` markup
+
+#### Choice comments
+
+A comment attached directly to a `Substitution` or `Highlight` whose first line starts with `pick:` turns that suggestion
+into a resolvable choice. Options are separated by `|`, may carry an optional `(a)`-style label, and `____` marks a blank
+for a custom replacement. Any further lines are shown as a note.
+
+```text
+{~~the model shows~>the results indicate~~}{>>pick: (a) the results indicate | (b) we find | (c) ____
+reason: hedge less<<}
+```
+
+Resolve these via the `Resolve suggested edits with choices` command, the `Resolve choice…` entry in the gutter/comment
+context menus, or from the global annotation view. Picking an option or typing a custom replacement writes that text into
+the document and removes the suggestion and its comment thread; rejecting restores the original text. Skipped items are left
+untouched, and the markup stays valid CriticMarkup for other tools.
 
 ### Suggestion Mode
 
