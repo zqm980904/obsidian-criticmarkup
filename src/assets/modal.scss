@@ -99,10 +99,20 @@
     border-radius: var(--radius-s);
   }
 
+  .cmtr-choice-resolver-decision {
+    font-size: var(--font-small);
+    color: var(--text-muted);
+  }
+
   .cmtr-choice-resolver-options {
     display: flex;
     flex-direction: column;
     gap: var(--size-4-1);
+
+    button.is-active {
+      background-color: var(--interactive-accent);
+      color: var(--text-on-accent);
+    }
   }
 
   .cmtr-choice-resolver-note {
@@ -144,6 +154,42 @@
   }
 
   .cmtr-choice-resolver-footer {
+    display: flex;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: var(--size-4-2);
+    margin-top: var(--size-4-2);
+  }
+}
+
+.cmtr-revert-choices-modal {
+  .cmtr-revert-choices {
+    display: flex;
+    flex-direction: column;
+    gap: var(--size-4-2);
+  }
+
+  .cmtr-revert-choices-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--size-4-2);
+  }
+
+  .cmtr-revert-choices-row {
+    display: flex;
+    align-items: baseline;
+    gap: var(--size-4-2);
+  }
+
+  .cmtr-revert-choices-uid {
+    color: var(--text-faint);
+  }
+
+  .cmtr-revert-choices-original {
+    color: var(--text-muted);
+  }
+
+  .cmtr-revert-choices-footer {
     display: flex;
     flex-direction: row;
     flex-wrap: wrap;

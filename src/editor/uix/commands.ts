@@ -14,7 +14,7 @@ import {
 	selectionContainsRanges,
 } from "../base";
 import { addCommentToView, generateCriticMarkupPatchFromDiff } from "../base";
-import { ChoiceResolverModal } from "../../ui/modals";
+import { ChoiceResolverModal, RevertChoicesModal } from "../../ui/modals";
 import {
 	editMode,
 	editModeValue,
@@ -23,7 +23,7 @@ import {
 	previewModeState,
 } from "../settings";
 import { getEditMode } from "./extensions/editing-modes";
-import { getChoiceMode } from "../../util/choice-file";
+import { exportResolvedNote, getChoiceMode } from "../../util/choice-file";
 import { showProgressBarNotice } from "../../util/obsidian-util";
 import { annotationGutterFoldAnnotation } from "../renderers/gutters";
 import {pathWithoutExtension} from "../../util/util";
@@ -134,6 +134,42 @@ export const editor_commands: (plugin: CommentatorPlugin) => ECommand[] = (plugi
 			const available = mode.mode === "external" || findChoiceSites(editor.cm.state.field(rangeParser).ranges, editor.cm.state.doc, { mode: "inline" }).length > 0;
 			if (checking || !available) return available;
 			new ChoiceResolverModal(plugin.app, editor.cm, file).open();
+		},
+	},
+	{
+		id: "export-resolved-choices",
+		name: "Export resolved choices",
+		icon: "file-output",
+		editor_context: true,
+		check_callback: (checking: boolean, _editor: Editor, view: MarkdownView | MarkdownFileInfo) => {
+			const file = view.file ?? null;
+			const available = getChoiceMode(plugin.app, file).mode === "external" && file !== null;
+			if (checking || !available) return available;
+			exportResolvedNote(plugin, file, false);
+		},
+	},
+	{
+		id: "export-resolved-choices-with-comments",
+		name: "Export resolved choices with comments",
+		icon: "file-plus",
+		editor_context: true,
+		check_callback: (checking: boolean, _editor: Editor, view: MarkdownView | MarkdownFileInfo) => {
+			const file = view.file ?? null;
+			const available = getChoiceMode(plugin.app, file).mode === "external" && file !== null;
+			if (checking || !available) return available;
+			exportResolvedNote(plugin, file, true);
+		},
+	},
+	{
+		id: "revert-resolved-choices",
+		name: "Revert resolved choices",
+		icon: "undo-2",
+		editor_context: true,
+		check_callback: (checking: boolean, editor: Editor, view: MarkdownView | MarkdownFileInfo) => {
+			const file = view.file ?? null;
+			const available = getChoiceMode(plugin.app, file).mode === "external";
+			if (checking || !available) return available;
+			new RevertChoicesModal(plugin.app, editor.cm, file).open();
 		},
 	},
 	{
