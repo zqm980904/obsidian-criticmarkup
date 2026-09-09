@@ -73,10 +73,14 @@ export interface ResolvedComment {
 	time: number;
 }
 
+/** What gets written to the resolved file: a document resolution, or an explicit skip (deferred/undone). */
+export type ChoiceRecord = ChoiceResolution | { kind: "skip" };
+
 export type ResolvedDecision =
 	| { kind: "option"; label?: string; text: string; time: number }
 	| { kind: "custom"; text: string; time: number }
-	| { kind: "reject"; time: number };
+	| { kind: "reject"; time: number }
+	| { kind: "skip"; time: number };
 
 export interface ResolvedEntry {
 	comments?: ResolvedComment[];
@@ -377,7 +381,7 @@ export function mergeResolution(
 	existing: ResolvedFile | null,
 	source: string,
 	uid: string,
-	resolution: ChoiceResolution,
+	resolution: ChoiceRecord,
 	time: number,
 ): ResolvedFile {
 	const resolutions: Record<string, ResolvedEntry> = {};
@@ -391,6 +395,10 @@ export function mergeResolution(
 		if (!entry.comments)
 			entry.comments = [];
 		entry.comments.push({ text: resolution.text, time });
+		// A comment does not settle the choice; the site is deferred like a skip
+		entry.decision = { kind: "skip", time };
+	} else if (resolution.kind === "skip") {
+		entry.decision = { kind: "skip", time };
 	} else if (resolution.kind === "option") {
 		const decision: ResolvedDecision = { kind: "option", text: resolution.option.text, time };
 		if (resolution.option.label !== undefined)
@@ -403,4 +411,34 @@ export function mergeResolution(
 	}
 
 	return { version: 1, source, resolutions };
+}
+
+/**
+ * Mark the given uids as skipped if they currently hold a settling decision (option/custom/reject).
+ * Returns null when nothing had to change.
+ */
+export function revertResolutionsToSkip(existing: ResolvedFile | null, uids: string[], time: number): ResolvedFile | null {
+	if (!existing) return null;
+	const to_revert = uids.filter(uid => {
+		const decision = existing.resolutions[uid]?.decision;
+		return decision !== undefined && decision.kind !== "skip";
+	});
+	if (to_revert.length === 0) return null;
+
+	let result: ResolvedFile = existing;
+	for (const uid of to_revert)
+		result = mergeResolution(result, existing.source, uid, { kind: "skip" }, time);
+	return result;
+}
+
+/** UIDs of external choice markers among the given ranges (e.g. the ranges (re)inserted or deleted by a transaction). */
+export function uidMarkersIn(ranges: CriticMarkupRange[]): string[] {
+	const uids: string[] = [];
+	for (const range of ranges) {
+		if (range.type !== SuggestionType.COMMENT) continue;
+		const marker = parseChoiceMarker(range.unwrap());
+		if (marker?.kind === "external")
+			uids.push(marker.uid);
+	}
+	return uids;
 }

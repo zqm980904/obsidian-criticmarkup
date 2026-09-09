@@ -16,6 +16,8 @@ import {
 	resolveChoiceFilePath,
 	resolvedPathFor,
 	type ResolvedFile,
+	revertResolutionsToSkip,
+	uidMarkersIn,
 	validateChoiceFile,
 } from "../src/editor/base/edit-logic/resolve-choice";
 import { getRangesInText } from "../src/editor/base/edit-util/range-parser";
@@ -488,5 +490,131 @@ describe("mergeResolution", () => {
 			{ text: "first", time: 2 },
 			{ text: "second", time: 3 },
 		]);
+	});
+
+	test("skip sets decision skip on a fresh uid", () => {
+		expect(mergeResolution(null, "note.choices.json", "c1", { kind: "skip" }, 10)).toEqual({
+			version: 1,
+			source: "note.choices.json",
+			resolutions: {
+				c1: {
+					decision: { kind: "skip", time: 10 },
+				},
+			},
+		});
+	});
+
+	test("skip overwrites an option decision and keeps comments", () => {
+		const existing: ResolvedFile = {
+			version: 1,
+			source: "old.json",
+			resolutions: {
+				c1: {
+					comments: [{ text: "keep", time: 1 }],
+					decision: { kind: "option", label: "a", text: "the results indicate", time: 2 },
+				},
+			},
+		};
+		const result = mergeResolution(existing, "note.choices.json", "c1", { kind: "skip" }, 3);
+		expect(result.resolutions.c1).toEqual({
+			comments: [{ text: "keep", time: 1 }],
+			decision: { kind: "skip", time: 3 },
+		});
+	});
+
+	test("comment appends and sets decision skip; later option overwrites skip", () => {
+		const with_comment = mergeResolution(null, "s.json", "c1", { kind: "comment", text: "hmm" }, 1);
+		expect(with_comment.resolutions.c1).toEqual({
+			comments: [{ text: "hmm", time: 1 }],
+			decision: { kind: "skip", time: 1 },
+		});
+
+		const with_option = mergeResolution(with_comment, "s.json", "c1", { kind: "option", option: option_a }, 2);
+		expect(with_option.resolutions.c1.decision).toEqual({
+			kind: "option",
+			label: "a",
+			text: "the results indicate",
+			time: 2,
+		});
+		expect(with_option.resolutions.c1.comments).toEqual([{ text: "hmm", time: 1 }]);
+	});
+});
+
+describe("revertResolutionsToSkip", () => {
+	test("null existing → null", () => {
+		expect(revertResolutionsToSkip(null, ["c1"], 10)).toBeNull();
+	});
+
+	test("no settled decisions (only skip / only comments / unknown uid) → null", () => {
+		const only_skip: ResolvedFile = {
+			version: 1,
+			source: "s.json",
+			resolutions: { c1: { decision: { kind: "skip", time: 1 } } },
+		};
+		expect(revertResolutionsToSkip(only_skip, ["c1"], 10)).toBeNull();
+
+		const only_comments: ResolvedFile = {
+			version: 1,
+			source: "s.json",
+			resolutions: { c1: { comments: [{ text: "x", time: 1 }] } },
+		};
+		expect(revertResolutionsToSkip(only_comments, ["c1"], 10)).toBeNull();
+
+		const settled_other: ResolvedFile = {
+			version: 1,
+			source: "s.json",
+			resolutions: { c1: { decision: { kind: "option", text: "a", time: 1 } } },
+		};
+		expect(revertResolutionsToSkip(settled_other, ["unknown"], 10)).toBeNull();
+		expect(revertResolutionsToSkip(settled_other, [], 10)).toBeNull();
+	});
+
+	test("reverts listed option/custom uids only; keeps comments; uses time; no mutation", () => {
+		const existing: ResolvedFile = {
+			version: 1,
+			source: "s.json",
+			resolutions: {
+				c1: {
+					comments: [{ text: "keep me", time: 1 }],
+					decision: { kind: "option", label: "a", text: "the results indicate", time: 2 },
+				},
+				c2: { decision: { kind: "custom", text: "rewritten", time: 3 } },
+				c3: { decision: { kind: "reject", time: 4 } },
+				c4: { comments: [{ text: "other", time: 5 }] },
+			},
+		};
+		const snapshot = JSON.parse(JSON.stringify(existing));
+
+		const result = revertResolutionsToSkip(existing, ["c1", "c2", "missing"], 99);
+		expect(result).not.toBeNull();
+		expect(result!.source).toBe("s.json");
+		expect(result!.resolutions.c1).toEqual({
+			comments: [{ text: "keep me", time: 1 }],
+			decision: { kind: "skip", time: 99 },
+		});
+		expect(result!.resolutions.c2).toEqual({
+			decision: { kind: "skip", time: 99 },
+		});
+		expect(result!.resolutions.c3).toEqual({ decision: { kind: "reject", time: 4 } });
+		expect(result!.resolutions.c4).toEqual({ comments: [{ text: "other", time: 5 }] });
+		expect(existing).toEqual(snapshot);
+		existing.resolutions.c1.comments!.push({ text: "mutated", time: 0 });
+		expect(result!.resolutions.c1.comments).toEqual([{ text: "keep me", time: 1 }]);
+	});
+});
+
+describe("uidMarkersIn", () => {
+	test("COMMENT #uid markers only; pick, plain, and addition bodies ignored", () => {
+		const text = "{~~a~>b~~}{>>#c1<<} {>>pick: x | y<<} {>>#c2<<} {>>plain<<} {++#c3++}";
+		const ranges = parse(text);
+		expect(ranges.ranges.map(range => ({ type: range.type, unwrap: range.unwrap() }))).toEqual([
+			{ type: SuggestionType.SUBSTITUTION, unwrap: "ab" },
+			{ type: SuggestionType.COMMENT, unwrap: "#c1" },
+			{ type: SuggestionType.COMMENT, unwrap: "pick: x | y" },
+			{ type: SuggestionType.COMMENT, unwrap: "#c2" },
+			{ type: SuggestionType.COMMENT, unwrap: "plain" },
+			{ type: SuggestionType.ADDITION, unwrap: "#c3" },
+		]);
+		expect(uidMarkersIn(ranges.ranges)).toEqual(["c1", "c2"]);
 	});
 });

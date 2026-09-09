@@ -2,12 +2,13 @@ import { type App, TFile } from "obsidian";
 
 import {
 	CHOICE_FRONTMATTER_KEY,
-	type ChoiceResolution,
+	type ChoiceRecord,
 	type ChoiceSource,
 	mergeResolution,
 	resolveChoiceFilePath,
 	type ResolvedFile,
 	resolvedPathFor,
+	revertResolutionsToSkip,
 	validateChoiceFile,
 } from "../editor/base";
 
@@ -63,30 +64,48 @@ export async function loadChoiceSource(app: App, mode: ChoiceMode): Promise<Choi
 	return { mode: "external", file: validated };
 }
 
-export async function recordResolution(
+// All resolved-file writes go through one queue so a read-modify-write never interleaves with another
+let write_queue: Promise<void> = Promise.resolve();
+
+function update_resolved_file(
 	app: App,
 	json_path: string,
-	uid: string,
-	resolution: ChoiceResolution,
+	update: (existing: ResolvedFile | null) => ResolvedFile | null,
 ): Promise<void> {
-	const resolved_path = resolvedPathFor(json_path);
-	const existing_file = file_by_path(app, resolved_path);
+	const run = async () => {
+		const resolved_path = resolvedPathFor(json_path);
+		const existing_file = file_by_path(app, resolved_path);
 
-	let existing: ResolvedFile | null = null;
-	if (existing_file) {
-		try {
-			const parsed = JSON.parse(await app.vault.read(existing_file)) as Partial<ResolvedFile>;
-			if (parsed && typeof parsed.resolutions === "object" && parsed.resolutions !== null)
-				existing = parsed as ResolvedFile;
-		} catch {
-			existing = null;
+		let existing: ResolvedFile | null = null;
+		if (existing_file) {
+			try {
+				const parsed = JSON.parse(await app.vault.read(existing_file)) as Partial<ResolvedFile>;
+				if (parsed && typeof parsed.resolutions === "object" && parsed.resolutions !== null)
+					existing = parsed as ResolvedFile;
+			} catch {
+				existing = null;
+			}
 		}
-	}
 
-	const data = mergeResolution(existing, json_path, uid, resolution, Date.now());
-	const content = JSON.stringify(data, null, 2);
-	if (existing_file)
-		await app.vault.modify(existing_file, content);
-	else
-		await app.vault.create(resolved_path, content);
+		const data = update(existing);
+		if (!data) return;
+		const content = JSON.stringify(data, null, 2);
+		if (existing_file)
+			await app.vault.modify(existing_file, content);
+		else
+			await app.vault.create(resolved_path, content);
+	};
+
+	const result = write_queue.then(run);
+	write_queue = result.catch(() => {});
+	return result;
+}
+
+export function recordResolution(app: App, json_path: string, uid: string, record: ChoiceRecord): Promise<void> {
+	return update_resolved_file(app, json_path, existing => mergeResolution(existing, json_path, uid, record, Date.now()));
+}
+
+/** After an undo re-inserted choice markers, their settled decisions no longer hold: mark them as skipped. */
+export function revertResolutions(app: App, json_path: string, uids: string[]): Promise<void> {
+	return update_resolved_file(app, json_path, existing => revertResolutionsToSkip(existing, uids, Date.now()));
 }

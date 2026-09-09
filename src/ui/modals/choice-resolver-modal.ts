@@ -3,6 +3,7 @@ import { type EditorView } from "@codemirror/view";
 import { mount, unmount } from "svelte";
 
 import {
+	type ChoiceRecord,
 	type ChoiceResolution,
 	type ChoiceSite,
 	type ChoiceSource,
@@ -10,13 +11,12 @@ import {
 	rangeParser,
 	resolveChoice,
 } from "../../editor/base";
-import { pluginSettingsField } from "../../editor/uix";
+import { choiceDecisionAnnotation, pluginSettingsField } from "../../editor/uix";
 import { getChoiceMode, loadChoiceSource, recordResolution } from "../../util/choice-file";
 import ChoiceResolverModalView from "./ChoiceResolverModal.svelte";
 
 export class ChoiceResolverModal extends Modal {
 	private component: ReturnType<typeof ChoiceResolverModalView> | undefined;
-	private record_queue: Promise<void> = Promise.resolve();
 
 	constructor(app: App, private view: EditorView, private file: TFile | null, private start_from?: number) {
 		super(app);
@@ -51,6 +51,13 @@ export class ChoiceResolverModal extends Modal {
 				index = found;
 		}
 
+		const record = (site: ChoiceSite, entry: ChoiceRecord) => {
+			if (mode.mode !== "external") return;
+			recordResolution(this.app, mode.path, site.uid!, entry).catch(error => {
+				new Notice(error instanceof Error ? error.message : String(error));
+			});
+		};
+
 		this.component = mount(ChoiceResolverModalView, {
 			target: this.contentEl,
 			props: {
@@ -59,22 +66,23 @@ export class ChoiceResolverModal extends Modal {
 				source_path: mode.mode === "external" ? mode.path : undefined,
 				onResolve: (site: ChoiceSite, resolution: ChoiceResolution) => {
 					const settings = this.view.state.field(pluginSettingsField);
-					this.view.dispatch({ changes: resolveChoice(site, resolution, settings) });
+					const settles = resolution.kind !== "comment";
+					this.view.dispatch({
+						changes: resolveChoice(site, resolution, settings),
+						// Lets the undo/redo sync restore this decision when the removal of the marker is redone
+						annotations: mode.mode === "external" && settles ?
+							choiceDecisionAnnotation.of({ uid: site.uid!, record: resolution }) :
+							undefined,
+					});
 					const next_sites = findChoiceSites(
 						this.view.state.field(rangeParser).ranges,
 						this.view.state.doc,
 						source,
 					);
-					if (mode.mode === "external") {
-						// Chain writes so two quick decisions cannot read/write the resolved file out of order
-						this.record_queue = this.record_queue
-							.then(() => recordResolution(this.app, mode.path, site.uid!, resolution))
-							.catch(error => {
-								new Notice(error instanceof Error ? error.message : String(error));
-							});
-					}
+					record(site, resolution);
 					return next_sites;
 				},
+				onSkip: (site: ChoiceSite) => record(site, { kind: "skip" }),
 				onClose: () => this.close(),
 			},
 		});
