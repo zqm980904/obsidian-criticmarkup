@@ -2,7 +2,8 @@ import { EditorView, WidgetType } from "@codemirror/view";
 
 import { App, Component, editorInfoField, MarkdownRenderer, Menu, Notice, setIcon } from "obsidian";
 
-import { addCommentToView, CM_All_Brackets, create_range, CommentRange, CriticMarkupRange } from "../../base";
+import { addCommentToView, CM_All_Brackets, create_range, CommentRange, CriticMarkupRange, findChoiceSite, findChoiceSites, rangeParser } from "../../base";
+import { ChoiceResolverModal } from "../../../ui/modals";
 import { annotationGutterFocusAnnotation } from "../gutters";
 import { pluginSettingsField } from "../../uix";
 
@@ -121,6 +122,20 @@ export class CommentIconWidget extends WidgetType {
 			this.context_menu = menu;
 			menu.dom.addEventListener("click", () => { this.setFocused(true); });
 			menu.onHide(() => { this.context_menu = null; });
+
+			const choice_site = findChoiceSite(this.range);
+			if (choice_site) {
+				menu.addItem((item) => {
+					item.setTitle("Resolve choice…")
+						.setIcon("list-checks")
+						.setSection("close-annotation")
+						.onClick(() => {
+							const sites = findChoiceSites(this.view.state.field(rangeParser).ranges);
+							const indexOfSite = sites.findIndex(s => s.host.from === choice_site.host.from);
+							new ChoiceResolverModal(app, this.view, Math.max(0, indexOfSite)).open();
+						});
+				});
+			}
 
 			if (range.replies.length > 0) {
 				menu.addItem((item) => {

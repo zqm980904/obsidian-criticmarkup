@@ -5,7 +5,8 @@ import { Component, editorEditorField, editorInfoField, MarkdownRenderer, Menu, 
 
 import { EmbeddableMarkdownEditor } from "../../../../ui/embeddable-editor";
 
-import { acceptSuggestions, addCommentToView, create_range, CriticMarkupRange, rangeParser, rejectSuggestions, SuggestionType } from "../../../base";
+import { acceptSuggestions, addCommentToView, create_range, CriticMarkupRange, findChoiceSite, findChoiceSites, rangeParser, rejectSuggestions, SuggestionType } from "../../../base";
+import { ChoiceResolverModal } from "../../../../ui/modals";
 
 import { AnnotationInclusionType } from "../../../../constants";
 import { annotationGutterIncludedTypes, annotationGutterIncludedTypesState } from "../../../settings";
@@ -186,6 +187,21 @@ class AnnotationNode extends Component {
 					.setSection("close-annotation")
 					.onClick(() => {
 						this.marker.view.dispatch({ changes: rejectSuggestions(this.marker.view.state, this.range.from, this.range.to) });
+					});
+			});
+		}
+
+		const choice_site = findChoiceSite(this.range);
+		if (choice_site) {
+			menu.addItem((item) => {
+				item.setTitle("Resolve choice…")
+					.setIcon("list-checks")
+					.setSection("close-annotation")
+					.onClick(() => {
+						const { app } = this.marker.view.state.field(editorInfoField);
+						const sites = findChoiceSites(this.marker.view.state.field(rangeParser).ranges);
+						const indexOfSite = sites.findIndex(s => s.host.from === choice_site.host.from);
+						new ChoiceResolverModal(app, this.marker.view, Math.max(0, indexOfSite)).open();
 					});
 			});
 		}
