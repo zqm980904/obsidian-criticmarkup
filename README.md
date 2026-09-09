@@ -152,6 +152,10 @@ Resolving also records the decision in a sibling `.resolved.json` file (`note.ch
 }
 ```
 
+`decision.kind` is `"option"`, `"custom"`, `"reject"`, or `"skip"`. Skip is recorded as `{"kind":"skip"}`. Adding a comment
+records the comment and a skip decision and moves the dialog to the next item. Undoing a resolved choice in the editor
+reverts its decision to skip; redoing restores the decision (same editor session only).
+
 Modes are exclusive. When `commentator-choices` is set, only UID comments with a matching JSON entry are offered in the
 resolver; inline `pick:` comments still render but are not listed. Without the key, only `pick:` comments are sites and
 UID comments are ignored. If the key is present but the file is missing, unreadable, or invalid, a notice is shown and
