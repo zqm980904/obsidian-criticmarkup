@@ -7,12 +7,14 @@ import { type SelectionRange } from "@codemirror/state";
 import {
 	acceptSuggestions, applyToText,
 	CM_SuggestionTypes,
+	findChoiceSites,
 	mark_editor_ranges,
 	rangeParser,
 	rejectSuggestions,
 	selectionContainsRanges,
 } from "../base";
 import { addCommentToView, generateCriticMarkupPatchFromDiff } from "../base";
+import { ChoiceResolverModal } from "../../ui/modals";
 import {
 	editMode,
 	editModeValue,
@@ -118,6 +120,17 @@ export const editor_commands: (plugin: CommentatorPlugin) => ECommand[] = (plugi
 			editor.cm.dispatch(editor.cm.state.update({
 				changes,
 			}));
+		},
+	},
+	{
+		id: "resolve-choices",
+		name: "Resolve suggested edits with choices",
+		icon: "list-checks",
+		editor_context: true,
+		check_callback: (checking: boolean, editor: Editor, _) => {
+			const has_sites = findChoiceSites(editor.cm.state.field(rangeParser).ranges).length > 0;
+			if (checking || !has_sites) return has_sites;
+			new ChoiceResolverModal(plugin.app, editor.cm).open();
 		},
 	},
 	{
